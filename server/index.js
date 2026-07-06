@@ -1,6 +1,7 @@
 const express = require('express');
 const dotenv = require('dotenv');
-const connectDB = require('./config/db'); // 1. Import the connection file
+const connectDB = require('./config/db'); 
+const authRoutes = require('./routes/authRoutes');
 
 // Load environment variables
 dotenv.config();
@@ -13,6 +14,7 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware to parse incoming JSON data
 app.use(express.json());
+app.use('/api/auth', authRoutes); 
 
 // A simple test route
 app.get('/', (req, res) => {
