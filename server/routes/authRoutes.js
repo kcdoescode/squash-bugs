@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { signup } = require('../controllers/authController');
+// Grab both functions from the controller
+const { signup, login } = require('../controllers/authController'); 
 
-// Route incoming POST traffic at /signup to our controller function
+// Route incoming traffic to the right functions
 router.post('/signup', signup);
-
-// (We will add the login route here later!)
+router.post('/login', login); // <-- The new login route
 
 module.exports = router;

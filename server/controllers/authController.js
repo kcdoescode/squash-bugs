@@ -51,4 +51,30 @@ const signup = async (req, res) => {
   }
 };
 
-module.exports = { signup };
+// @desc    Authenticate a user & get token
+// @route   POST /api/auth/login
+const login = async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // 1. Find the user by their email
+    const user = await User.findOne({ email });
+
+    // 2. If user exists AND the password matches the scrambled password in the database
+    if (user && (await bcrypt.compare(password, user.password))) {
+      // 3. Send back the VIP Pass!
+      res.json({
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        organizationId: user.organization,
+        token: generateToken(user._id, user.organization),
+      });
+    } else {
+      res.status(401).json({ message: 'Invalid email or password' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+module.exports = { signup, login };
