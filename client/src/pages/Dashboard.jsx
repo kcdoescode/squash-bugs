@@ -100,7 +100,7 @@ export default function Dashboard() {
         </div>
         
         <div className="flex items-center gap-4">
-          <span className={`font-medium ${theme.textDark}`}>Hi, {user.name}</span>
+          <span className={`font-medium ${theme.textDark}`}>Hey Developer, {user.name}</span>
           <button 
             onClick={handleLogout}
             className={`flex items-center gap-2 px-4 py-2 rounded-full border-2 border-[#E5D4C3] ${theme.textDark} hover:bg-white transition-colors`}
