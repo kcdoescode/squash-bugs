@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, ArrowLeft, Disc } from 'lucide-react';
+import { Mail, Lock, User, ArrowLeft, Disc, KeyRound, Building2 } from 'lucide-react';
 
 const theme = {
   bg: "bg-[#FDF8EE]",
@@ -14,48 +14,43 @@ const theme = {
 export default function Signup() {
   const navigate = useNavigate();
   
-  // 1. Create state to hold the form data
+  const [mode, setMode] = useState('create'); // 'create' or 'join'
+  
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    password: '',
     organizationName: '',
-    password: ''
+    inviteCode: ''
   });
   const [error, setError] = useState('');
 
-  // 2. Handle input changes
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // 3. Handle the form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError(''); // Clear previous errors
+    setError('');
 
     try {
       const response = await fetch('http://localhost:5000/api/auth/signup', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...formData, mode }), // Send the mode to the backend
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        // Success! Save the VIP token to the browser
         localStorage.setItem('token', data.token);
         localStorage.setItem('user', JSON.stringify(data));
-        alert('Workspace created successfully!');
         navigate('/dashboard');
       } else {
-        // The server sent back an error (like "User already exists")
         setError(data.message);
       }
     } catch (err) {
-      setError('Failed to connect to the server. Is it running?');
+      setError('Failed to connect to the server.');
     }
   };
 
@@ -63,20 +58,33 @@ export default function Signup() {
     <div className={`min-h-screen ${theme.bg} flex flex-col items-center p-6 relative overflow-hidden font-sans`}>
       <div className="absolute top-[-10%] right-[-10%] w-64 h-64 bg-[#F4B976]/20 rounded-full blur-3xl"></div>
 
-      <div className="w-full max-w-md relative z-10 flex flex-col h-full mt-12">
-        <button onClick={() => navigate('/')} className={`${theme.textDark} mb-8 hover:opacity-70 transition-opacity w-fit`}>
+      <div className="w-full max-w-md relative z-10 flex flex-col h-full mt-8">
+        <button onClick={() => navigate('/')} className={`${theme.textDark} mb-6 hover:opacity-70 transition-opacity w-fit`}>
           <ArrowLeft size={28} />
         </button>
 
-        <div className="mb-10 text-center">
+        <div className="mb-8 text-center">
           <h1 className={`text-3xl font-bold ${theme.textDark} mb-2`}>Sign Up</h1>
-          <p className={theme.textLight}>Create your team's workspace</p>
+          <p className={theme.textLight}>Join your team to squash bugs</p>
         </div>
 
-        {/* 4. Connect the submit function to the form */}
-        <form className="space-y-5" onSubmit={handleSubmit}>
-          
-          {/* Display error message if there is one */}
+        {/* Toggle Mode Buttons */}
+        <div className="flex bg-[#E5D4C3]/30 rounded-full p-1 mb-6">
+            <button 
+                onClick={() => setMode('create')}
+                className={`flex-1 py-2 rounded-full font-bold text-sm transition-all ${mode === 'create' ? 'bg-white text-[#F4B976] shadow-sm' : `${theme.textLight} hover:text-[#5C4A3D]`}`}
+            >
+                Create Workspace
+            </button>
+            <button 
+                 onClick={() => setMode('join')}
+                 className={`flex-1 py-2 rounded-full font-bold text-sm transition-all ${mode === 'join' ? 'bg-white text-[#F4B976] shadow-sm' : `${theme.textLight} hover:text-[#5C4A3D]`}`}
+            >
+                Join Workspace
+            </button>
+        </div>
+
+        <form className="space-y-4" onSubmit={handleSubmit}>
           {error && <div className="text-red-500 text-sm text-center font-bold">{error}</div>}
 
           <div className="relative">
@@ -84,13 +92,9 @@ export default function Signup() {
               <User className={theme.textLight} size={20} />
             </div>
             <input 
-              type="text" 
-              name="name" // Added name attribute
-              value={formData.name} // Connected to state
-              onChange={handleChange} // Updates state when typing
+              type="text" name="name" value={formData.name} onChange={handleChange} required
               placeholder="Full Name" 
-              required
-              className={`w-full pl-12 pr-5 py-4 bg-transparent border-2 ${theme.inputBorder} rounded-full focus:outline-none focus:border-[#F4B976] ${theme.textDark} placeholder-[#C0AFA0] transition-colors`}
+              className={`w-full pl-12 pr-5 py-4 bg-transparent border-2 ${theme.inputBorder} rounded-full focus:outline-none focus:border-[#F4B976] ${theme.textDark}`}
             />
           </div>
 
@@ -99,49 +103,50 @@ export default function Signup() {
               <Mail className={theme.textLight} size={20} />
             </div>
             <input 
-              type="email" 
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
+              type="email" name="email" value={formData.email} onChange={handleChange} required
               placeholder="Email address" 
-              required
-              className={`w-full pl-12 pr-5 py-4 bg-transparent border-2 ${theme.inputBorder} rounded-full focus:outline-none focus:border-[#F4B976] ${theme.textDark} placeholder-[#C0AFA0] transition-colors`}
+              className={`w-full pl-12 pr-5 py-4 bg-transparent border-2 ${theme.inputBorder} rounded-full focus:outline-none focus:border-[#F4B976] ${theme.textDark}`}
             />
           </div>
 
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
-              <Disc className={theme.textLight} size={20} />
+          {/* Conditional Input based on mode */}
+          {mode === 'create' ? (
+              <div className="relative animate-in fade-in slide-in-from-bottom-2">
+                <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
+                <Building2 className={theme.textLight} size={20} />
+                </div>
+                <input 
+                type="text" name="organizationName" value={formData.organizationName} onChange={handleChange} required={mode==='create'}
+                placeholder="Organization Name" 
+                className={`w-full pl-12 pr-5 py-4 bg-transparent border-2 ${theme.inputBorder} rounded-full focus:outline-none focus:border-[#F4B976] ${theme.textDark}`}
+                />
             </div>
-            <input 
-              type="text" 
-              name="organizationName"
-              value={formData.organizationName}
-              onChange={handleChange}
-              placeholder="Organization Name" 
-              required
-              className={`w-full pl-12 pr-5 py-4 bg-transparent border-2 ${theme.inputBorder} rounded-full focus:outline-none focus:border-[#F4B976] ${theme.textDark} placeholder-[#C0AFA0] transition-colors`}
-            />
-          </div>
+          ) : (
+             <div className="relative animate-in fade-in slide-in-from-bottom-2">
+                <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
+                <KeyRound className={theme.textLight} size={20} />
+                </div>
+                <input 
+                type="text" name="inviteCode" value={formData.inviteCode} onChange={handleChange} required={mode==='join'}
+                placeholder="6-Digit Invite Code" 
+                className={`w-full pl-12 pr-5 py-4 bg-white/50 border-2 border-dashed border-[#F4B976]/50 rounded-full focus:outline-none focus:border-solid focus:border-[#F4B976] ${theme.textDark} font-mono uppercase tracking-widest`}
+                />
+            </div>
+          )}
 
           <div className="relative">
             <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
               <Lock className={theme.textLight} size={20} />
             </div>
             <input 
-              type="password" 
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
+              type="password" name="password" value={formData.password} onChange={handleChange} required minLength="6"
               placeholder="Password" 
-              required
-              minLength="6"
-              className={`w-full pl-12 pr-5 py-4 bg-transparent border-2 ${theme.inputBorder} rounded-full focus:outline-none focus:border-[#F4B976] ${theme.textDark} placeholder-[#C0AFA0] transition-colors`}
+              className={`w-full pl-12 pr-5 py-4 bg-transparent border-2 ${theme.inputBorder} rounded-full focus:outline-none focus:border-[#F4B976] ${theme.textDark}`}
             />
           </div>
 
-          <button type="submit" className={`w-full py-4 mt-4 rounded-full ${theme.primary} ${theme.primaryHover} text-white font-bold text-lg transition-all shadow-lg shadow-orange-200/50 active:scale-95`}>
-            Create Workspace
+          <button type="submit" className={`w-full py-4 mt-6 rounded-full ${theme.primary} ${theme.primaryHover} text-white font-bold text-lg transition-all shadow-lg active:scale-95`}>
+            {mode === 'create' ? 'Create Workspace' : 'Join Team'}
           </button>
         </form>
       </div>

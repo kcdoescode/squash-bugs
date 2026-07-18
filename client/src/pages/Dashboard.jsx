@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Disc, LogOut, Plus, Bug as BugIcon, CircleDashed, CheckCircle2 } from 'lucide-react';
+import { Disc, LogOut, Plus, Bug as BugIcon, CircleDashed, CheckCircle2, Copy, Check } from 'lucide-react';
 
 const theme = {
   bg: "bg-[#FDF8EE]",
@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [user, setUser] = useState(null);
   const [bugs, setBugs] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   
   const [newBug, setNewBug] = useState({
     title: '',
@@ -55,6 +56,14 @@ export default function Dashboard() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     navigate('/login');
+  };
+
+  const copyInviteCode = () => {
+    if (user?.inviteCode) {
+      navigator.clipboard.writeText(user.inviteCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000); // Reset the checkmark after 2 seconds
+    }
   };
 
   const handleCreateBug = async (e) => {
@@ -96,11 +105,25 @@ export default function Dashboard() {
           <div className={`p-2 rounded-full ${theme.primary} text-white`}>
             <Disc size={24} />
           </div>
-          <h1 className={`text-2xl font-bold ${theme.textDark}`}>Squash Bugs</h1>
+          <div>
+            <h1 className={`text-2xl font-bold ${theme.textDark}`}>Squash Bugs</h1>
+            {user?.organizationName && (
+               <p className={`text-xs font-bold uppercase tracking-wider ${theme.textLight}`}>{user.organizationName}</p>
+            )}
+          </div>
         </div>
         
         <div className="flex items-center gap-4">
-          <span className={`font-medium ${theme.textDark}`}>Hey Developer, {user.name}</span>
+          {user?.role === 'Admin' && user?.inviteCode && (
+            <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full shadow-sm border border-[#E5D4C3]">
+               <span className={`text-xs font-bold ${theme.textLight}`}>INVITE CODE:</span>
+               <span className={`font-mono font-bold ${theme.textDark} tracking-widest`}>{user.inviteCode}</span>
+               <button onClick={copyInviteCode} className={`p-1 rounded-md hover:bg-gray-100 transition-colors ${copied ? 'text-green-500' : theme.textLight}`}>
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+               </button>
+            </div>
+          )}
+          <span className={`font-medium ${theme.textDark}`}>Hi, {user.name}</span>
           <button 
             onClick={handleLogout}
             className={`flex items-center gap-2 px-4 py-2 rounded-full border-2 border-[#E5D4C3] ${theme.textDark} hover:bg-white transition-colors`}
