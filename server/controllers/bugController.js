@@ -33,4 +33,27 @@ const createBug = async (req, res) => {
   }
 };
 
-module.exports = { getBugs, createBug };
+// @desc    Update a bug
+// @route   PUT /api/bugs/:id
+const updateBug = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // We can accept updates for status, priority, description, etc.
+    const updatedBug = await Bug.findByIdAndUpdate(
+      id, 
+      req.body, 
+      { new: true } 
+    );
+
+    if (!updatedBug) {
+        return res.status(404).json({ message: 'Bug not found' });
+    }
+
+    res.json(updatedBug);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { getBugs, createBug, updateBug };

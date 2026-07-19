@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Disc, LogOut, Plus, Bug as BugIcon, CircleDashed, CheckCircle2, Copy, Check } from 'lucide-react';
+import { Disc, LogOut, Plus, Bug as BugIcon, CircleDashed, CheckCircle2, Copy, Check, ArrowRight, MessageSquare, Code2, Sparkles, Bot } from 'lucide-react';
 
 const theme = {
   bg: "bg-[#FDF8EE]",
@@ -16,8 +16,15 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [bugs, setBugs] = useState([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  
+  // Modal States
+  const [isNewBugModalOpen, setIsNewBugModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  
+  // Expanded Bug View State
+  const [selectedBug, setSelectedBug] = useState(null);
+  const [generatedPrompt, setGeneratedPrompt] = useState('');
+  const [promptCopied, setPromptCopied] = useState(false);
   
   const [newBug, setNewBug] = useState({
     title: '',
@@ -25,7 +32,6 @@ export default function Dashboard() {
     priority: 'Medium'
   });
 
-  // Check auth and fetch bugs on load
   useEffect(() => {
     const token = localStorage.getItem('token');
     const userData = localStorage.getItem('user');
@@ -35,8 +41,10 @@ export default function Dashboard() {
     } else if (userData) {
       const parsedUser = JSON.parse(userData);
       setUser(parsedUser);
-      // Fetch bugs for this user's organization
-      fetchBugs(parsedUser.organizationId || parsedUser.orgId || parsedUser._id); 
+      const orgIdToFetch = parsedUser.organization || parsedUser.organizationId;
+      if (orgIdToFetch) {
+        fetchBugs(orgIdToFetch); 
+      }
     }
   }, [navigate]);
 
@@ -62,14 +70,14 @@ export default function Dashboard() {
     if (user?.inviteCode) {
       navigator.clipboard.writeText(user.inviteCode);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000); // Reset the checkmark after 2 seconds
+      setTimeout(() => setCopied(false), 2000);
     }
   };
 
   const handleCreateBug = async (e) => {
     e.preventDefault();
     try {
-      const orgId = user.organizationId || user.orgId || user._id; // Fallbacks based on your auth structure
+      const orgId = user.organization || user.organizationId;
       const response = await fetch('http://localhost:5000/api/bugs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -82,13 +90,65 @@ export default function Dashboard() {
 
       if (response.ok) {
         const createdBug = await response.json();
-        setBugs([createdBug, ...bugs]); // Add new bug to the top of the list
-        setIsModalOpen(false); // Close modal
-        setNewBug({ title: '', description: '', priority: 'Medium' }); // Reset form
+        setBugs([createdBug, ...bugs]);
+        setIsNewBugModalOpen(false);
+        setNewBug({ title: '', description: '', priority: 'Medium' });
       }
     } catch (error) {
       console.error("Error creating bug", error);
     }
+  };
+
+  const handleUpdateStatus = async (bugId, newStatus, e) => {
+    // Prevent the click from bubbling up to the card and opening the modal
+    if (e) e.stopPropagation(); 
+    
+    try {
+      const response = await fetch(`http://localhost:5000/api/bugs/${bugId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (response.ok) {
+        setBugs(bugs.map(bug => 
+          bug._id === bugId ? { ...bug, status: newStatus } : bug
+        ));
+        
+        // If the expanded view is open, update its status too
+        if (selectedBug && selectedBug._id === bugId) {
+            setSelectedBug({...selectedBug, status: newStatus});
+        }
+      }
+    } catch (error) {
+      console.error("Error updating bug", error);
+    }
+  };
+
+  const generatePrompt = () => {
+      if (!selectedBug) return;
+      
+      const prompt = `I am a developer working on a web application. I have encountered a bug and I need help troubleshooting it.
+
+Bug Title: ${selectedBug.title}
+Severity/Priority: ${selectedBug.priority}
+Current Status: ${selectedBug.status}
+
+Bug Description:
+${selectedBug.description}
+
+Based on this information, please:
+1. Provide a short summary of potential causes for this issue.
+2. Suggest 2-3 specific areas in the code or architecture I should investigate.
+3. If the description is too vague, please tell me exactly what files, code snippets, or error logs you need me to provide to diagnose this properly.`;
+
+      setGeneratedPrompt(prompt);
+  };
+
+  const copyPrompt = () => {
+      navigator.clipboard.writeText(generatedPrompt);
+      setPromptCopied(true);
+      setTimeout(() => setPromptCopied(false), 2000);
   };
 
   if (!user) return null;
@@ -134,11 +194,11 @@ export default function Dashboard() {
         </div>
       </nav>
 
-      {}
+      {/* Header and Controls */}
       <div className="flex justify-between items-center mb-6">
         <h2 className={`text-2xl font-bold ${theme.textDark}`}>Bug Board</h2>
         <button 
-          onClick={() => setIsModalOpen(true)}
+          onClick={() => setIsNewBugModalOpen(true)}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-full ${theme.primary} ${theme.primaryHover} text-white font-bold transition-all shadow-md active:scale-95`}
         >
           <Plus size={20} />
@@ -146,7 +206,7 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {}
+      {/* Kanban Board Columns */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* TO DO COLUMN */}
         <div className={`flex flex-col gap-4 p-4 rounded-[2rem] ${theme.cardBg} border border-white/50 h-[70vh] overflow-y-auto shadow-sm`}>
@@ -154,9 +214,22 @@ export default function Dashboard() {
             <CircleDashed size={18} className="text-[#A88B6E]" /> To Do ({todoBugs.length})
           </h3>
           {todoBugs.map(bug => (
-            <div key={bug._id} className="bg-white p-4 rounded-3xl shadow-sm border border-[#E5D4C3] cursor-pointer hover:shadow-md transition-shadow">
+            <div 
+                key={bug._id} 
+                onClick={() => setSelectedBug(bug)}
+                className="bg-white p-4 rounded-3xl shadow-sm border border-[#E5D4C3] cursor-pointer hover:shadow-md transition-shadow group"
+            >
               <div className="flex justify-between items-start mb-2">
-                <span className="text-xs font-bold px-3 py-1 bg-red-100 text-red-600 rounded-full uppercase tracking-wider">{bug.priority}</span>
+                <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${bug.priority === 'Critical' ? 'bg-red-100 text-red-600' : bug.priority === 'High' ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>
+                    {bug.priority}
+                </span>
+                <button 
+                  onClick={(e) => handleUpdateStatus(bug._id, 'In Progress', e)}
+                  className="opacity-0 group-hover:opacity-100 p-1.5 bg-[#FDF8EE] hover:bg-[#F4B976] hover:text-white text-[#A88B6E] rounded-full transition-all"
+                  title="Move to In Progress"
+                >
+                  <ArrowRight size={16} />
+                </button>
               </div>
               <h4 className={`font-bold ${theme.textDark} mb-1`}>{bug.title}</h4>
               <p className={`text-sm ${theme.textLight} line-clamp-2`}>{bug.description}</p>
@@ -170,9 +243,22 @@ export default function Dashboard() {
             <BugIcon size={18} className="text-blue-400" /> In Progress ({inProgressBugs.length})
           </h3>
           {inProgressBugs.map(bug => (
-             <div key={bug._id} className="bg-white p-4 rounded-3xl shadow-sm border border-[#E5D4C3] cursor-pointer hover:shadow-md transition-shadow">
+             <div 
+                key={bug._id} 
+                onClick={() => setSelectedBug(bug)}
+                className="bg-white p-4 rounded-3xl shadow-sm border border-[#E5D4C3] cursor-pointer hover:shadow-md transition-shadow group"
+             >
              <div className="flex justify-between items-start mb-2">
-               <span className="text-xs font-bold px-3 py-1 bg-red-100 text-red-600 rounded-full uppercase tracking-wider">{bug.priority}</span>
+               <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${bug.priority === 'Critical' ? 'bg-red-100 text-red-600' : bug.priority === 'High' ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>
+                    {bug.priority}
+                </span>
+               <button 
+                  onClick={(e) => handleUpdateStatus(bug._id, 'Squashed', e)}
+                  className="opacity-0 group-hover:opacity-100 p-1.5 bg-[#FDF8EE] hover:bg-green-500 hover:text-white text-[#A88B6E] rounded-full transition-all"
+                  title="Mark as Squashed"
+                >
+                  <Check size={16} />
+                </button>
              </div>
              <h4 className={`font-bold ${theme.textDark} mb-1`}>{bug.title}</h4>
              <p className={`text-sm ${theme.textLight} line-clamp-2`}>{bug.description}</p>
@@ -186,9 +272,15 @@ export default function Dashboard() {
             <CheckCircle2 size={18} className="text-green-500" /> Squashed ({squashedBugs.length})
           </h3>
           {squashedBugs.map(bug => (
-             <div key={bug._id} className="bg-white p-4 rounded-3xl shadow-sm border border-[#E5D4C3] opacity-60 cursor-pointer hover:opacity-100 transition-opacity">
+             <div 
+                key={bug._id} 
+                onClick={() => setSelectedBug(bug)}
+                className="bg-white p-4 rounded-3xl shadow-sm border border-[#E5D4C3] opacity-60 cursor-pointer hover:opacity-100 transition-opacity"
+             >
              <div className="flex justify-between items-start mb-2">
-               <span className="text-xs font-bold px-3 py-1 bg-gray-200 text-gray-600 rounded-full uppercase tracking-wider">{bug.priority}</span>
+               <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${bug.priority === 'Critical' ? 'bg-red-100 text-red-600' : bug.priority === 'High' ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>
+                    {bug.priority}
+                </span>
              </div>
              <h4 className={`font-bold line-through ${theme.textDark} mb-1`}>{bug.title}</h4>
              <p className={`text-sm ${theme.textLight} line-clamp-2`}>{bug.description}</p>
@@ -197,9 +289,9 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {}
-      {isModalOpen && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-[#5C4A3D]/40 backdrop-blur-sm p-4">
+      {/* NEW BUG MODAL */}
+      {isNewBugModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#5C4A3D]/40 backdrop-blur-sm p-4">
           <div className="bg-[#FDF8EE] w-full max-w-lg p-8 rounded-[2rem] shadow-2xl border-2 border-white">
             <h2 className={`text-2xl font-bold ${theme.textDark} mb-6`}>Report a Bug</h2>
             <form onSubmit={handleCreateBug} className="space-y-4">
@@ -237,7 +329,7 @@ export default function Dashboard() {
               </div>
 
               <div className="flex gap-4 mt-8">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 py-3 rounded-full bg-white text-[#A88B6E] font-bold border-2 border-[#E5D4C3] hover:bg-gray-50 transition-colors">
+                <button type="button" onClick={() => setIsNewBugModalOpen(false)} className="flex-1 py-3 rounded-full bg-white text-[#A88B6E] font-bold border-2 border-[#E5D4C3] hover:bg-gray-50 transition-colors">
                   Cancel
                 </button>
                 <button type="submit" className={`flex-1 py-3 rounded-full ${theme.primary} ${theme.primaryHover} text-white font-bold transition-all shadow-md active:scale-95`}>
@@ -246,6 +338,98 @@ export default function Dashboard() {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* EXPANDED BUG / AI MODAL */}
+      {selectedBug && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#5C4A3D]/40 backdrop-blur-sm p-4">
+            <div className="bg-[#FDF8EE] w-full max-w-5xl h-[80vh] flex rounded-[2rem] shadow-2xl border-2 border-white overflow-hidden">
+                
+                {/* Left Side: Bug Details */}
+                <div className="w-1/2 p-8 border-r border-[#E5D4C3] overflow-y-auto flex flex-col">
+                    <div className="flex justify-between items-start mb-6">
+                        <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${selectedBug.priority === 'Critical' ? 'bg-red-100 text-red-600' : 'bg-gray-200 text-gray-700'}`}>
+                            {selectedBug.priority} Priority
+                        </span>
+                        <span className={`text-sm font-bold ${theme.textLight}`}>{selectedBug.status}</span>
+                    </div>
+                    
+                    <h2 className={`text-3xl font-bold ${theme.textDark} mb-4`}>{selectedBug.title}</h2>
+                    
+                    <div className="mb-6 flex-grow">
+                        <h3 className={`text-sm font-bold ${theme.textLight} mb-2 uppercase tracking-wider`}>Description</h3>
+                        <p className={`text-base ${theme.textDark} whitespace-pre-wrap`}>{selectedBug.description}</p>
+                    </div>
+
+                    <div className="mt-auto flex gap-4 pt-6 border-t border-[#E5D4C3]">
+                        {selectedBug.status === 'To Do' && (
+                             <button onClick={() => handleUpdateStatus(selectedBug._id, 'In Progress', null)} className="flex-1 py-3 rounded-full bg-white text-blue-500 font-bold border-2 border-blue-200 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2">
+                                Start Working
+                             </button>
+                        )}
+                         {selectedBug.status === 'In Progress' && (
+                             <button onClick={() => handleUpdateStatus(selectedBug._id, 'Squashed', null)} className="flex-1 py-3 rounded-full bg-green-500 text-white font-bold shadow-md hover:bg-green-600 transition-colors flex items-center justify-center gap-2">
+                                <Check size={18} /> Squash Bug
+                             </button>
+                        )}
+                        <button onClick={() => { setSelectedBug(null); setGeneratedPrompt(''); }} className={`px-6 py-3 rounded-full bg-white ${theme.textLight} font-bold border-2 ${theme.inputBorder} hover:bg-gray-50 transition-colors`}>
+                            Close
+                        </button>
+                    </div>
+                </div>
+
+                {/* Right Side: AI Prompt Generator */}
+                <div className="w-1/2 p-8 bg-white/50 overflow-y-auto">
+                    <div className="flex items-center gap-3 mb-6 text-purple-600">
+                        <Bot size={28} />
+                        <h2 className="text-2xl font-bold">AI Debug Assistant</h2>
+                    </div>
+                    
+                    <p className={`text-sm ${theme.textDark} mb-6`}>
+                        Need help fixing this? Generate an optimized prompt tailored to this specific bug, then paste it into your favorite AI tool for suggestions.
+                    </p>
+
+                    {!generatedPrompt ? (
+                        <button 
+                            onClick={generatePrompt}
+                            className="w-full py-4 rounded-2xl bg-purple-100 text-purple-700 font-bold border-2 border-purple-200 hover:bg-purple-200 transition-colors flex items-center justify-center gap-2"
+                        >
+                            <Sparkles size={20} /> Generate Debugging Prompt
+                        </button>
+                    ) : (
+                        <div className="animate-in fade-in slide-in-from-bottom-2">
+                            <div className="relative">
+                                <textarea 
+                                    readOnly
+                                    value={generatedPrompt}
+                                    className={`w-full h-64 p-4 bg-white border-2 border-purple-200 rounded-2xl text-sm font-mono text-gray-700 resize-none focus:outline-none`}
+                                />
+                                <button 
+                                    onClick={copyPrompt}
+                                    className="absolute top-4 right-4 p-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition-colors"
+                                    title="Copy Prompt"
+                                >
+                                    {promptCopied ? <Check size={18} /> : <Copy size={18} />}
+                                </button>
+                            </div>
+                            
+                            <div className="mt-6">
+                                <p className={`text-sm font-bold ${theme.textLight} mb-3 uppercase tracking-wider`}>Try it here:</p>
+                                <div className="flex gap-3">
+                                    <a href="https://chat.openai.com/" target="_blank" rel="noreferrer" className="flex-1 py-3 bg-white border-2 border-gray-200 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-gray-700 hover:border-green-400 hover:text-green-600 transition-colors">
+                                        <MessageSquare size={16} /> ChatGPT
+                                    </a>
+                                    <a href="https://gemini.google.com/" target="_blank" rel="noreferrer" className="flex-1 py-3 bg-white border-2 border-gray-200 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-gray-700 hover:border-blue-400 hover:text-blue-600 transition-colors">
+                                        <Sparkles size={16} /> Gemini
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+            </div>
         </div>
       )}
     </div>
