@@ -19,6 +19,9 @@ const bugSchema = new mongoose.Schema({
     enum: ['Low', 'Medium', 'High', 'Critical'],
     default: 'Medium'
   },
+  tags: [{
+    type: String
+  }],
   organizationId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Organization',

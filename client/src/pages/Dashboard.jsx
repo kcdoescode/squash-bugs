@@ -233,6 +233,17 @@ Based on this information, please:
               </div>
               <h4 className={`font-bold ${theme.textDark} mb-1`}>{bug.title}</h4>
               <p className={`text-sm ${theme.textLight} line-clamp-2`}>{bug.description}</p>
+              
+              {/* Render AI Tags for To Do */}
+              {bug.tags && bug.tags.length > 0 && (
+                 <div className="flex flex-wrap gap-1 mt-3">
+                    {bug.tags.map((tag, idx) => (
+                       <span key={idx} className="text-[10px] font-bold px-2 py-0.5 bg-purple-100 text-purple-600 rounded-md uppercase tracking-wider">
+                          {tag}
+                       </span>
+                    ))}
+                 </div>
+              )}
             </div>
           ))}
         </div>
@@ -262,6 +273,17 @@ Based on this information, please:
              </div>
              <h4 className={`font-bold ${theme.textDark} mb-1`}>{bug.title}</h4>
              <p className={`text-sm ${theme.textLight} line-clamp-2`}>{bug.description}</p>
+
+              {/* Render AI Tags for In Progress */}
+              {bug.tags && bug.tags.length > 0 && (
+                 <div className="flex flex-wrap gap-1 mt-3">
+                    {bug.tags.map((tag, idx) => (
+                       <span key={idx} className="text-[10px] font-bold px-2 py-0.5 bg-purple-100 text-purple-600 rounded-md uppercase tracking-wider">
+                          {tag}
+                       </span>
+                    ))}
+                 </div>
+              )}
            </div>
           ))}
         </div>
@@ -284,6 +306,17 @@ Based on this information, please:
              </div>
              <h4 className={`font-bold line-through ${theme.textDark} mb-1`}>{bug.title}</h4>
              <p className={`text-sm ${theme.textLight} line-clamp-2`}>{bug.description}</p>
+
+              {/* Render AI Tags for Squashed */}
+              {bug.tags && bug.tags.length > 0 && (
+                 <div className="flex flex-wrap gap-1 mt-3 opacity-60">
+                    {bug.tags.map((tag, idx) => (
+                       <span key={idx} className="text-[10px] font-bold px-2 py-0.5 bg-gray-200 text-gray-500 rounded-md uppercase tracking-wider">
+                          {tag}
+                       </span>
+                    ))}
+                 </div>
+              )}
            </div>
           ))}
         </div>
@@ -354,6 +387,17 @@ Based on this information, please:
                         </span>
                         <span className={`text-sm font-bold ${theme.textLight}`}>{selectedBug.status}</span>
                     </div>
+
+                    {/* Show tags inside the expanded modal too */}
+                    {selectedBug.tags && selectedBug.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-4">
+                            {selectedBug.tags.map((tag, idx) => (
+                                <span key={idx} className="text-xs font-bold px-2.5 py-1 bg-purple-100 text-purple-600 rounded-md uppercase tracking-wider">
+                                    {tag}
+                                </span>
+                            ))}
+                        </div>
+                    )}
                     
                     <h2 className={`text-3xl font-bold ${theme.textDark} mb-4`}>{selectedBug.title}</h2>
                     

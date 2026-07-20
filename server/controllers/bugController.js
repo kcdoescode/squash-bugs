@@ -1,4 +1,5 @@
 const Bug = require('../models/Bug');
+const { analyzeBugAndGenerateTags } = require('../utils/aiService');
 
 // @desc    Get all bugs for a specific organization
 // @route   GET /api/bugs/:orgId
@@ -19,10 +20,14 @@ const createBug = async (req, res) => {
   try {
     const { title, description, priority, organizationId, createdBy } = req.body;
 
+    // Call our AI Service to read the description and generate tags!
+    const tags = await analyzeBugAndGenerateTags(title, description);
+
     const bug = await Bug.create({
       title,
       description,
       priority,
+      tags, // Save the generated tags to the database
       organizationId,
       createdBy
     });
