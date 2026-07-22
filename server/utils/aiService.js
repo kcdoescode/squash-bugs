@@ -18,13 +18,11 @@ const generateWithFallback = async (prompt) => {
     if (!ai) throw new Error("AI not initialized");
 
     const modelsToTry = [
-         'gemini-3.5-flash-Lite',  // Newest stable
-        'gemini-3.6-flash',
-        'gemini-2.5-flash',       // Try the newest stable first
-        'gemini-1.5-flash',       // Fallback 1
-        'gemini-1.5-flash-8b',    // Fallback 2 (lightweight)
-        'gemini-2.0-flash-lite'   // Fallback 3 (another lite version)
-    ];
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+];
 
     let lastError;
 
