@@ -1,51 +1,111 @@
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+require('dotenv').config(); 
+const { GoogleGenAI } = require("@google/genai");
+
+const apiKey = process.env.GEMINI_API_KEY;
+if (!apiKey) {
+    console.error("CRITICAL ERROR: GEMINI_API_KEY is not defined in process.env!");
+} else {
+    console.log("Successfully found GEMINI_API_KEY starting with:", apiKey.substring(0, 5) + "...");
+}
+
+let ai;
+if (apiKey) {
+    ai = new GoogleGenAI({ apiKey: String(apiKey) });
+}
+
+// Fallback helper function to try multiple models
+const generateWithFallback = async (prompt) => {
+    if (!ai) throw new Error("AI not initialized");
+
+    const modelsToTry = [
+         'gemini-3.5-flash-Lite',  // Newest stable
+        'gemini-3.6-flash',
+        'gemini-2.5-flash',       // Try the newest stable first
+        'gemini-1.5-flash',       // Fallback 1
+        'gemini-1.5-flash-8b',    // Fallback 2 (lightweight)
+        'gemini-2.0-flash-lite'   // Fallback 3 (another lite version)
+    ];
+
+    let lastError;
+
+    for (const modelName of modelsToTry) {
+        try {
+            console.log(`Attempting request with model: ${modelName}`);
+            const response = await ai.models.generateContent({
+                model: modelName,
+                contents: prompt,
+            });
+            console.log(`Success with model: ${modelName}`);
+            return response;
+        } catch (error) {
+            console.warn(`Model ${modelName} failed. Reason: ${error.status || error.message}`);
+            lastError = error;
+            // If it's a 401 (Bad API Key), stop trying. Otherwise, keep looping.
+            if (error.status === 401) {
+                throw error;
+            }
+        }
+    }
+
+    // If we exhausted all models
+    throw lastError;
+};
+
 
 const analyzeBugAndGenerateTags = async (title, description) => {
   try {
-    const apiKey = process.env.GEMINI_API_KEY?.trim();
-
-    if (!apiKey) {
-      console.warn("No GEMINI_API_KEY found. Skipping AI tagging.");
-      return [];
-    }
-
-    // Create the client only after checking and reading the API key
-    const genAI = new GoogleGenerativeAI(apiKey);
-
-    const model = genAI.getGenerativeModel({
-      model: "gemini-3.5-flash",
-    });
+    if (!ai) return [];
 
     const prompt = `
-You are an expert software engineer triage assistant.
+      You are an expert software engineer triage assistant.
+      Analyze the following bug report and provide 1 to 3 short, one-word tags (e.g., Frontend, Database, Auth, UI, API, Security, CSS) that categorize it. 
+      Return ONLY a comma-separated list of tags, nothing else. No explanations.
+      
+      Title: ${title}
+      Description: ${description}
+    `;
 
-Analyze the following bug report and provide 1 to 3 short,
-one-word tags such as Frontend, Database, Auth, UI, API,
-Security, or CSS.
-
-Return only a comma-separated list of tags.
-Do not provide explanations.
-
-Title: ${title}
-Description: ${description}
-    `.trim();
-
-    const result = await model.generateContent(prompt);
-    const response = result.response.text();
-
-    return response
-      .split(",")
-      .map((tag) => tag.trim().replace(/[^a-zA-Z0-9-]/g, ""))
-      .filter((tag) => tag.length > 0);
+    // Use our new fallback wrapper
+    const response = await generateWithFallback(prompt);
+    
+    const text = response.text;
+    const tags = text
+        .split(',')
+        .map(tag => tag.trim().replace(/[^a-zA-Z0-9-]/g, '')) 
+        .filter(t => t.length > 0); 
+        
+    return tags;
   } catch (error) {
-    console.error("AI Tagging Error:", {
-      message: error.message,
-      status: error.status,
-      statusText: error.statusText,
-    });
-
-    return [];
+    console.error("AI Tagging Error:", error.message || error);
+    return []; 
   }
 };
 
-module.exports = { analyzeBugAndGenerateTags };
+const suggestBugFix = async (title, description) => {
+    try {
+      if (!ai) return "No API key configured. Check your terminal for errors.";
+  
+      const prompt = `
+        You are a helpful senior software engineer mentoring a junior developer.
+        Please look at this bug report:
+        
+        Title: ${title}
+        Description: ${description}
+        
+        Provide a short, easy-to-read response. 
+        1. First, give a 1-2 sentence summary of what might be causing the issue.
+        2. Second, provide a bulleted list of 2-3 specific things the developer should check or fix.
+        3. If the description is too vague, politely ask them to look for specific error logs or code snippets.
+      `;
+  
+      // Use our new fallback wrapper
+      const response = await generateWithFallback(prompt);
+
+      return response.text;
+    } catch (error) {
+      console.error("AI Debugging Error:", error.message || error);
+      return "Sorry, I encountered an error. Please check your API limits or try again later.";
+    }
+  };
+
+module.exports = { analyzeBugAndGenerateTags, suggestBugFix };

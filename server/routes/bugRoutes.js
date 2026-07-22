@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getBugs, createBug, updateBug } = require('../controllers/bugController');
+const { getBugs, createBug, updateBug, analyzeBug } = require('../controllers/bugController');
 
 // Route to get bugs requires the organization ID in the URL
 router.get('/:orgId', getBugs);
@@ -8,7 +8,11 @@ router.get('/:orgId', getBugs);
 // Route to create a new bug
 router.post('/', createBug);
 
+// Route to get an AI analysis of a bug
+router.post('/analyze', analyzeBug);
+
 // Route to update a bug (like changing its status)
 router.put('/:id', updateBug);
+
 
 module.exports = router;

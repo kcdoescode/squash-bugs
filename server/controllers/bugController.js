@@ -1,12 +1,9 @@
 const Bug = require('../models/Bug');
-const { analyzeBugAndGenerateTags } = require('../utils/aiService');
+const { analyzeBugAndGenerateTags, suggestBugFix } = require('../utils/aiService');
 
-// @desc    Get all bugs for a specific organization
-// @route   GET /api/bugs/:orgId
 const getBugs = async (req, res) => {
   try {
     const { orgId } = req.params;
-    // Find all bugs that belong to this organization, sorted by newest first
     const bugs = await Bug.find({ organizationId: orgId }).sort({ createdAt: -1 });
     res.json(bugs);
   } catch (error) {
@@ -14,20 +11,17 @@ const getBugs = async (req, res) => {
   }
 };
 
-// @desc    Create a new bug
-// @route   POST /api/bugs
 const createBug = async (req, res) => {
   try {
     const { title, description, priority, organizationId, createdBy } = req.body;
 
-    // Call our AI Service to read the description and generate tags!
     const tags = await analyzeBugAndGenerateTags(title, description);
 
     const bug = await Bug.create({
       title,
       description,
       priority,
-      tags, // Save the generated tags to the database
+      tags, 
       organizationId,
       createdBy
     });
@@ -38,13 +32,10 @@ const createBug = async (req, res) => {
   }
 };
 
-// @desc    Update a bug
-// @route   PUT /api/bugs/:id
 const updateBug = async (req, res) => {
   try {
     const { id } = req.params;
     
-    // We can accept updates for status, priority, description, etc.
     const updatedBug = await Bug.findByIdAndUpdate(
       id, 
       req.body, 
@@ -61,4 +52,16 @@ const updateBug = async (req, res) => {
   }
 };
 
-module.exports = { getBugs, createBug, updateBug };
+// --- NEW FUNCTION ADDED HERE ---
+const analyzeBug = async (req, res) => {
+    try {
+      const { title, description } = req.body;
+      // Call the AI Service
+      const solution = await suggestBugFix(title, description);
+      res.json({ solution });
+    } catch (error) {
+      res.status(500).json({ message: error.message });
+    }
+};
+
+module.exports = { getBugs, createBug, updateBug, analyzeBug };

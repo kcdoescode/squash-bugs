@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Disc, LogOut, Plus, Bug as BugIcon, CircleDashed, CheckCircle2, Copy, Check, ArrowRight, MessageSquare, Code2, Sparkles, Bot } from 'lucide-react';
+import { Disc, LogOut, Plus, Bug as BugIcon, CircleDashed, CheckCircle2, Copy, Check, ArrowRight, MessageSquare, Bot, Sparkles } from 'lucide-react';
 
 const theme = {
   bg: "bg-[#FDF8EE]",
@@ -17,14 +17,22 @@ export default function Dashboard() {
   const [user, setUser] = useState(null);
   const [bugs, setBugs] = useState([]);
   
-  // Modal States
   const [isNewBugModalOpen, setIsNewBugModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   
   // Expanded Bug View State
   const [selectedBug, setSelectedBug] = useState(null);
+  
+  // Tab State: 'solution' or 'prompt'
+  const [aiTab, setAiTab] = useState('solution');
+  
+  // Prompt Generator States
   const [generatedPrompt, setGeneratedPrompt] = useState('');
   const [promptCopied, setPromptCopied] = useState(false);
+
+  // In-App AI Solution States
+  const [aiSolution, setAiSolution] = useState('');
+  const [isAiLoading, setIsAiLoading] = useState(false);
   
   const [newBug, setNewBug] = useState({
     title: '',
@@ -100,7 +108,6 @@ export default function Dashboard() {
   };
 
   const handleUpdateStatus = async (bugId, newStatus, e) => {
-    // Prevent the click from bubbling up to the card and opening the modal
     if (e) e.stopPropagation(); 
     
     try {
@@ -115,7 +122,6 @@ export default function Dashboard() {
           bug._id === bugId ? { ...bug, status: newStatus } : bug
         ));
         
-        // If the expanded view is open, update its status too
         if (selectedBug && selectedBug._id === bugId) {
             setSelectedBug({...selectedBug, status: newStatus});
         }
@@ -123,6 +129,34 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Error updating bug", error);
     }
+  };
+
+  // --- NEW: Function to ask the backend AI for a solution ---
+  const handleAskAI = async () => {
+      if (!selectedBug) return;
+      setIsAiLoading(true);
+      
+      try {
+          const response = await fetch('http://localhost:5000/api/bugs/analyze', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  title: selectedBug.title,
+                  description: selectedBug.description
+              })
+          });
+          
+          if (response.ok) {
+              const data = await response.json();
+              setAiSolution(data.solution);
+          } else {
+              setAiSolution("Error connecting to the AI server.");
+          }
+      } catch (error) {
+          setAiSolution("Network error while trying to reach the AI.");
+      } finally {
+          setIsAiLoading(false);
+      }
   };
 
   const generatePrompt = () => {
@@ -151,6 +185,13 @@ Based on this information, please:
       setTimeout(() => setPromptCopied(false), 2000);
   };
 
+  const closeExpandedBug = () => {
+      setSelectedBug(null); 
+      setGeneratedPrompt('');
+      setAiSolution('');
+      setAiTab('solution');
+  };
+
   if (!user) return null;
 
   const todoBugs = bugs.filter(b => b.status === 'To Do');
@@ -159,7 +200,6 @@ Based on this information, please:
 
   return (
     <div className={`min-h-screen ${theme.bg} font-sans p-6 relative`}>
-      {/* Navigation Bar */}
       <nav className="flex justify-between items-center mb-8">
         <div className="flex items-center gap-3">
           <div className={`p-2 rounded-full ${theme.primary} text-white`}>
@@ -194,7 +234,6 @@ Based on this information, please:
         </div>
       </nav>
 
-      {/* Header and Controls */}
       <div className="flex justify-between items-center mb-6">
         <h2 className={`text-2xl font-bold ${theme.textDark}`}>Bug Board</h2>
         <button 
@@ -206,7 +245,6 @@ Based on this information, please:
         </button>
       </div>
 
-      {/* Kanban Board Columns */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* TO DO COLUMN */}
         <div className={`flex flex-col gap-4 p-4 rounded-[2rem] ${theme.cardBg} border border-white/50 h-[70vh] overflow-y-auto shadow-sm`}>
@@ -234,7 +272,6 @@ Based on this information, please:
               <h4 className={`font-bold ${theme.textDark} mb-1`}>{bug.title}</h4>
               <p className={`text-sm ${theme.textLight} line-clamp-2`}>{bug.description}</p>
               
-              {/* Render AI Tags for To Do */}
               {bug.tags && bug.tags.length > 0 && (
                  <div className="flex flex-wrap gap-1 mt-3">
                     {bug.tags.map((tag, idx) => (
@@ -274,7 +311,6 @@ Based on this information, please:
              <h4 className={`font-bold ${theme.textDark} mb-1`}>{bug.title}</h4>
              <p className={`text-sm ${theme.textLight} line-clamp-2`}>{bug.description}</p>
 
-              {/* Render AI Tags for In Progress */}
               {bug.tags && bug.tags.length > 0 && (
                  <div className="flex flex-wrap gap-1 mt-3">
                     {bug.tags.map((tag, idx) => (
@@ -307,7 +343,6 @@ Based on this information, please:
              <h4 className={`font-bold line-through ${theme.textDark} mb-1`}>{bug.title}</h4>
              <p className={`text-sm ${theme.textLight} line-clamp-2`}>{bug.description}</p>
 
-              {/* Render AI Tags for Squashed */}
               {bug.tags && bug.tags.length > 0 && (
                  <div className="flex flex-wrap gap-1 mt-3 opacity-60">
                     {bug.tags.map((tag, idx) => (
@@ -388,7 +423,6 @@ Based on this information, please:
                         <span className={`text-sm font-bold ${theme.textLight}`}>{selectedBug.status}</span>
                     </div>
 
-                    {/* Show tags inside the expanded modal too */}
                     {selectedBug.tags && selectedBug.tags.length > 0 && (
                         <div className="flex flex-wrap gap-2 mb-4">
                             {selectedBug.tags.map((tag, idx) => (
@@ -417,60 +451,119 @@ Based on this information, please:
                                 <Check size={18} /> Squash Bug
                              </button>
                         )}
-                        <button onClick={() => { setSelectedBug(null); setGeneratedPrompt(''); }} className={`px-6 py-3 rounded-full bg-white ${theme.textLight} font-bold border-2 ${theme.inputBorder} hover:bg-gray-50 transition-colors`}>
+                        <button onClick={closeExpandedBug} className={`px-6 py-3 rounded-full bg-white ${theme.textLight} font-bold border-2 ${theme.inputBorder} hover:bg-gray-50 transition-colors`}>
                             Close
                         </button>
                     </div>
                 </div>
 
-                {/* Right Side: AI Prompt Generator */}
-                <div className="w-1/2 p-8 bg-white/50 overflow-y-auto">
-                    <div className="flex items-center gap-3 mb-6 text-purple-600">
-                        <Bot size={28} />
-                        <h2 className="text-2xl font-bold">AI Debug Assistant</h2>
-                    </div>
+                {/* Right Side: AI Assistant Tabs */}
+                <div className="w-1/2 flex flex-col bg-white/50 overflow-hidden">
                     
-                    <p className={`text-sm ${theme.textDark} mb-6`}>
-                        Need help fixing this? Generate an optimized prompt tailored to this specific bug, then paste it into your favorite AI tool for suggestions.
-                    </p>
-
-                    {!generatedPrompt ? (
+                    {/* Tab Navigation */}
+                    <div className="flex border-b border-[#E5D4C3] bg-white">
                         <button 
-                            onClick={generatePrompt}
-                            className="w-full py-4 rounded-2xl bg-purple-100 text-purple-700 font-bold border-2 border-purple-200 hover:bg-purple-200 transition-colors flex items-center justify-center gap-2"
+                            onClick={() => setAiTab('solution')}
+                            className={`flex-1 py-4 text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors ${aiTab === 'solution' ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50/50' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
                         >
-                            <Sparkles size={20} /> Generate Debugging Prompt
+                            <Bot size={18} /> In-App AI Fix
                         </button>
-                    ) : (
-                        <div className="animate-in fade-in slide-in-from-bottom-2">
-                            <div className="relative">
-                                <textarea 
-                                    readOnly
-                                    value={generatedPrompt}
-                                    className={`w-full h-64 p-4 bg-white border-2 border-purple-200 rounded-2xl text-sm font-mono text-gray-700 resize-none focus:outline-none`}
-                                />
-                                <button 
-                                    onClick={copyPrompt}
-                                    className="absolute top-4 right-4 p-2 bg-purple-100 text-purple-600 rounded-lg hover:bg-purple-200 transition-colors"
-                                    title="Copy Prompt"
-                                >
-                                    {promptCopied ? <Check size={18} /> : <Copy size={18} />}
-                                </button>
+                        <button 
+                            onClick={() => setAiTab('prompt')}
+                            className={`flex-1 py-4 text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors ${aiTab === 'prompt' ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50/50' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-50'}`}
+                        >
+                            <Copy size={18} /> Prompt Engine
+                        </button>
+                    </div>
+
+                    <div className="p-8 overflow-y-auto flex-grow">
+                        
+                        {/* TAB 1: IN-APP AI */}
+                        {aiTab === 'solution' && (
+                            <div className="animate-in fade-in h-full flex flex-col">
+                                <p className={`text-sm ${theme.textDark} mb-6`}>
+                                    Ask the AI to instantly analyze this bug and suggest a fix directly in your dashboard.
+                                </p>
+                                
+                                {!aiSolution && !isAiLoading ? (
+                                    <button 
+                                        onClick={handleAskAI}
+                                        className="w-full py-4 rounded-2xl bg-purple-100 text-purple-700 font-bold border-2 border-purple-200 hover:bg-purple-200 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                                    >
+                                        <Sparkles size={20} /> Ask AI For Solution
+                                    </button>
+                                ) : isAiLoading ? (
+                                    <div className="flex-grow flex flex-col items-center justify-center text-purple-500 opacity-70">
+                                        <Bot size={48} className="mb-4 animate-bounce" />
+                                        <p className="font-bold tracking-widest uppercase text-sm animate-pulse">Analyzing Bug...</p>
+                                    </div>
+                                ) : (
+                                    <div className="flex-grow flex flex-col">
+                                        <h3 className="text-sm font-bold text-purple-600 mb-3 uppercase tracking-wider flex items-center gap-2">
+                                            <Sparkles size={16}/> AI Suggestion
+                                        </h3>
+                                        <div className="flex-grow p-5 bg-white border-2 border-purple-200 rounded-2xl text-sm text-gray-700 overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner">
+                                            {aiSolution}
+                                        </div>
+                                        <button 
+                                            onClick={() => setAiSolution('')}
+                                            className="mt-4 text-xs font-bold text-gray-400 hover:text-gray-600 uppercase tracking-wider self-center"
+                                        >
+                                            Clear Response
+                                        </button>
+                                    </div>
+                                )}
                             </div>
-                            
-                            <div className="mt-6">
-                                <p className={`text-sm font-bold ${theme.textLight} mb-3 uppercase tracking-wider`}>Try it here:</p>
-                                <div className="flex gap-3">
-                                    <a href="https://chat.openai.com/" target="_blank" rel="noreferrer" className="flex-1 py-3 bg-white border-2 border-gray-200 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-gray-700 hover:border-green-400 hover:text-green-600 transition-colors">
-                                        <MessageSquare size={16} /> ChatGPT
-                                    </a>
-                                    <a href="https://gemini.google.com/" target="_blank" rel="noreferrer" className="flex-1 py-3 bg-white border-2 border-gray-200 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-gray-700 hover:border-blue-400 hover:text-blue-600 transition-colors">
-                                        <Sparkles size={16} /> Gemini
-                                    </a>
-                                </div>
+                        )}
+
+                        {/* TAB 2: PROMPT GENERATOR */}
+                        {aiTab === 'prompt' && (
+                            <div className="animate-in fade-in h-full flex flex-col">
+                                <p className={`text-sm ${theme.textDark} mb-6`}>
+                                    Want to use your own custom GPT? Generate an optimized prompt tailored to this specific bug, then paste it into your favorite tool.
+                                </p>
+
+                                {!generatedPrompt ? (
+                                    <button 
+                                        onClick={generatePrompt}
+                                        className="w-full py-4 rounded-2xl bg-white text-gray-700 font-bold border-2 border-gray-200 hover:bg-gray-50 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                                    >
+                                        <Copy size={20} /> Generate Copy/Paste Prompt
+                                    </button>
+                                ) : (
+                                    <div className="flex-grow flex flex-col">
+                                        <div className="relative flex-grow flex flex-col">
+                                            <textarea 
+                                                readOnly
+                                                value={generatedPrompt}
+                                                className={`flex-grow w-full p-5 bg-white border-2 border-gray-200 rounded-2xl text-sm font-mono text-gray-600 resize-none focus:outline-none shadow-inner`}
+                                            />
+                                            <button 
+                                                onClick={copyPrompt}
+                                                className="absolute top-4 right-4 p-2 bg-gray-100 text-gray-600 rounded-lg hover:bg-gray-200 transition-colors shadow-sm"
+                                                title="Copy Prompt"
+                                            >
+                                                {promptCopied ? <Check size={18} /> : <Copy size={18} />}
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="mt-6">
+                                            <p className={`text-sm font-bold ${theme.textLight} mb-3 uppercase tracking-wider`}>Try it here:</p>
+                                            <div className="flex gap-3">
+                                                <a href="https://chat.openai.com/" target="_blank" rel="noreferrer" className="flex-1 py-3 bg-white border-2 border-gray-200 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-gray-700 hover:border-green-400 hover:text-green-600 transition-colors shadow-sm">
+                                                    <MessageSquare size={16} /> ChatGPT
+                                                </a>
+                                                <a href="https://gemini.google.com/" target="_blank" rel="noreferrer" className="flex-1 py-3 bg-white border-2 border-gray-200 rounded-xl flex items-center justify-center gap-2 text-sm font-bold text-gray-700 hover:border-blue-400 hover:text-blue-600 transition-colors shadow-sm">
+                                                    <Sparkles size={16} /> Gemini
+                                                </a>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                    )}
+                        )}
+
+                    </div>
                 </div>
 
             </div>
