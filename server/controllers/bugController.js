@@ -4,7 +4,10 @@ const { analyzeBugAndGenerateTags, suggestBugFix } = require('../utils/aiService
 const getBugs = async (req, res) => {
   try {
     const { orgId } = req.params;
-    const bugs = await Bug.find({ organizationId: orgId }).sort({ createdAt: -1 });
+    // CRITICAL UPDATE: We must populate 'createdBy' to get the user's name on the frontend
+    const bugs = await Bug.find({ organizationId: orgId })
+      .populate('createdBy', 'name email')
+      .sort({ createdAt: -1 });
     res.json(bugs);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -26,7 +29,10 @@ const createBug = async (req, res) => {
       createdBy
     });
 
-    res.status(201).json(bug);
+    // Populate the newly created bug before returning it so the UI updates instantly
+    const populatedBug = await Bug.findById(bug._id).populate('createdBy', 'name email');
+
+    res.status(201).json(populatedBug);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -36,11 +42,12 @@ const updateBug = async (req, res) => {
   try {
     const { id } = req.params;
     
+    // Allow updating title, description, priority, and status
     const updatedBug = await Bug.findByIdAndUpdate(
       id, 
       req.body, 
       { new: true } 
-    );
+    ).populate('createdBy', 'name email'); // Populate after update
 
     if (!updatedBug) {
         return res.status(404).json({ message: 'Bug not found' });
@@ -52,11 +59,9 @@ const updateBug = async (req, res) => {
   }
 };
 
-// --- NEW FUNCTION ADDED HERE ---
 const analyzeBug = async (req, res) => {
     try {
       const { title, description } = req.body;
-      // Call the AI Service
       const solution = await suggestBugFix(title, description);
       res.json({ solution });
     } catch (error) {

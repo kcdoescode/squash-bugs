@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Disc, LogOut, Plus, Bug as BugIcon, CircleDashed, CheckCircle2, Copy, Check, ArrowRight, MessageSquare, Bot, Sparkles } from 'lucide-react';
+import { Disc, LogOut, Plus, Bug as BugIcon, CircleDashed, CheckCircle2, Copy, Check, ArrowRight, MessageSquare, Bot, Sparkles, User as UserIcon, Edit2, Save, X } from 'lucide-react';
 
 const theme = {
   bg: "bg-[#FDF8EE]",
@@ -10,6 +10,13 @@ const theme = {
   primaryHover: "hover:bg-[#EAA962]",
   cardBg: "bg-white/60",
   inputBorder: "border-[#E5D4C3]",
+};
+
+// Utility to clean up AI markdown asterisks
+const formatAIResponse = (text) => {
+    if (!text) return "";
+    // Replace **bold** with actual bold tags or just strip them for clean text
+    return text.replace(/\*\*(.*?)\*\*/g, '$1'); 
 };
 
 export default function Dashboard() {
@@ -22,6 +29,10 @@ export default function Dashboard() {
   
   // Expanded Bug View State
   const [selectedBug, setSelectedBug] = useState(null);
+  
+  // Edit Bug State
+  const [isEditingBug, setIsEditingBug] = useState(false);
+  const [editBugData, setEditBugData] = useState({ title: '', description: '', priority: '' });
   
   // Tab State: 'solution' or 'prompt'
   const [aiTab, setAiTab] = useState('solution');
@@ -118,12 +129,10 @@ export default function Dashboard() {
       });
 
       if (response.ok) {
-        setBugs(bugs.map(bug => 
-          bug._id === bugId ? { ...bug, status: newStatus } : bug
-        ));
-        
+        const updated = await response.json();
+        setBugs(bugs.map(bug => bug._id === bugId ? updated : bug));
         if (selectedBug && selectedBug._id === bugId) {
-            setSelectedBug({...selectedBug, status: newStatus});
+            setSelectedBug(updated);
         }
       }
     } catch (error) {
@@ -131,7 +140,26 @@ export default function Dashboard() {
     }
   };
 
-  // --- NEW: Function to ask the backend AI for a solution ---
+  // --- NEW: Save Edited Bug ---
+  const handleSaveEdit = async () => {
+      try {
+        const response = await fetch(`http://localhost:5000/api/bugs/${selectedBug._id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(editBugData),
+        });
+
+        if (response.ok) {
+          const updated = await response.json();
+          setBugs(bugs.map(b => b._id === selectedBug._id ? updated : b));
+          setSelectedBug(updated);
+          setIsEditingBug(false);
+        }
+      } catch (error) {
+        console.error("Error saving edits", error);
+      }
+  };
+
   const handleAskAI = async () => {
       if (!selectedBug) return;
       setIsAiLoading(true);
@@ -161,7 +189,6 @@ export default function Dashboard() {
 
   const generatePrompt = () => {
       if (!selectedBug) return;
-      
       const prompt = `I am a developer working on a web application. I have encountered a bug and I need help troubleshooting it.
 
 Bug Title: ${selectedBug.title}
@@ -175,7 +202,6 @@ Based on this information, please:
 1. Provide a short summary of potential causes for this issue.
 2. Suggest 2-3 specific areas in the code or architecture I should investigate.
 3. If the description is too vague, please tell me exactly what files, code snippets, or error logs you need me to provide to diagnose this properly.`;
-
       setGeneratedPrompt(prompt);
   };
 
@@ -190,6 +216,12 @@ Based on this information, please:
       setGeneratedPrompt('');
       setAiSolution('');
       setAiTab('solution');
+      setIsEditingBug(false);
+  };
+
+  const openExpandedBug = (bug) => {
+      setSelectedBug(bug);
+      setEditBugData({ title: bug.title, description: bug.description, priority: bug.priority });
   };
 
   if (!user) return null;
@@ -254,8 +286,8 @@ Based on this information, please:
           {todoBugs.map(bug => (
             <div 
                 key={bug._id} 
-                onClick={() => setSelectedBug(bug)}
-                className="bg-white p-4 rounded-3xl shadow-sm border border-[#E5D4C3] cursor-pointer hover:shadow-md transition-shadow group"
+                onClick={() => openExpandedBug(bug)}
+                className="bg-white p-4 rounded-3xl shadow-sm border border-[#E5D4C3] cursor-pointer hover:shadow-md transition-shadow group flex flex-col"
             >
               <div className="flex justify-between items-start mb-2">
                 <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${bug.priority === 'Critical' ? 'bg-red-100 text-red-600' : bug.priority === 'High' ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>
@@ -270,17 +302,24 @@ Based on this information, please:
                 </button>
               </div>
               <h4 className={`font-bold ${theme.textDark} mb-1`}>{bug.title}</h4>
-              <p className={`text-sm ${theme.textLight} line-clamp-2`}>{bug.description}</p>
               
-              {bug.tags && bug.tags.length > 0 && (
-                 <div className="flex flex-wrap gap-1 mt-3">
-                    {bug.tags.map((tag, idx) => (
-                       <span key={idx} className="text-[10px] font-bold px-2 py-0.5 bg-purple-100 text-purple-600 rounded-md uppercase tracking-wider">
-                          {tag}
-                       </span>
-                    ))}
-                 </div>
-              )}
+              <div className="mt-auto pt-3">
+                  {bug.tags && bug.tags.length > 0 && (
+                     <div className="flex flex-wrap gap-1 mb-2">
+                        {bug.tags.map((tag, idx) => (
+                           <span key={idx} className="text-[10px] font-bold px-2 py-0.5 bg-purple-100 text-purple-600 rounded-md uppercase tracking-wider">
+                              {tag}
+                           </span>
+                        ))}
+                     </div>
+                  )}
+                  {bug.createdBy && (
+                     <div className="flex items-center gap-1.5 text-[#A88B6E]">
+                        <UserIcon size={12} />
+                        <span className="text-[10px] font-medium truncate">{bug.createdBy.name}</span>
+                     </div>
+                  )}
+              </div>
             </div>
           ))}
         </div>
@@ -293,8 +332,8 @@ Based on this information, please:
           {inProgressBugs.map(bug => (
              <div 
                 key={bug._id} 
-                onClick={() => setSelectedBug(bug)}
-                className="bg-white p-4 rounded-3xl shadow-sm border border-[#E5D4C3] cursor-pointer hover:shadow-md transition-shadow group"
+                onClick={() => openExpandedBug(bug)}
+                className="bg-white p-4 rounded-3xl shadow-sm border border-[#E5D4C3] cursor-pointer hover:shadow-md transition-shadow group flex flex-col"
              >
              <div className="flex justify-between items-start mb-2">
                <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${bug.priority === 'Critical' ? 'bg-red-100 text-red-600' : bug.priority === 'High' ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>
@@ -309,17 +348,24 @@ Based on this information, please:
                 </button>
              </div>
              <h4 className={`font-bold ${theme.textDark} mb-1`}>{bug.title}</h4>
-             <p className={`text-sm ${theme.textLight} line-clamp-2`}>{bug.description}</p>
 
-              {bug.tags && bug.tags.length > 0 && (
-                 <div className="flex flex-wrap gap-1 mt-3">
-                    {bug.tags.map((tag, idx) => (
-                       <span key={idx} className="text-[10px] font-bold px-2 py-0.5 bg-purple-100 text-purple-600 rounded-md uppercase tracking-wider">
-                          {tag}
-                       </span>
-                    ))}
-                 </div>
-              )}
+              <div className="mt-auto pt-3">
+                  {bug.tags && bug.tags.length > 0 && (
+                     <div className="flex flex-wrap gap-1 mb-2">
+                        {bug.tags.map((tag, idx) => (
+                           <span key={idx} className="text-[10px] font-bold px-2 py-0.5 bg-purple-100 text-purple-600 rounded-md uppercase tracking-wider">
+                              {tag}
+                           </span>
+                        ))}
+                     </div>
+                  )}
+                  {bug.createdBy && (
+                     <div className="flex items-center gap-1.5 text-[#A88B6E]">
+                        <UserIcon size={12} />
+                        <span className="text-[10px] font-medium truncate">{bug.createdBy.name}</span>
+                     </div>
+                  )}
+              </div>
            </div>
           ))}
         </div>
@@ -332,8 +378,8 @@ Based on this information, please:
           {squashedBugs.map(bug => (
              <div 
                 key={bug._id} 
-                onClick={() => setSelectedBug(bug)}
-                className="bg-white p-4 rounded-3xl shadow-sm border border-[#E5D4C3] opacity-60 cursor-pointer hover:opacity-100 transition-opacity"
+                onClick={() => openExpandedBug(bug)}
+                className="bg-white p-4 rounded-3xl shadow-sm border border-[#E5D4C3] opacity-60 cursor-pointer hover:opacity-100 transition-opacity flex flex-col"
              >
              <div className="flex justify-between items-start mb-2">
                <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${bug.priority === 'Critical' ? 'bg-red-100 text-red-600' : bug.priority === 'High' ? 'bg-orange-100 text-orange-600' : 'bg-gray-100 text-gray-600'}`}>
@@ -341,17 +387,24 @@ Based on this information, please:
                 </span>
              </div>
              <h4 className={`font-bold line-through ${theme.textDark} mb-1`}>{bug.title}</h4>
-             <p className={`text-sm ${theme.textLight} line-clamp-2`}>{bug.description}</p>
 
-              {bug.tags && bug.tags.length > 0 && (
-                 <div className="flex flex-wrap gap-1 mt-3 opacity-60">
-                    {bug.tags.map((tag, idx) => (
-                       <span key={idx} className="text-[10px] font-bold px-2 py-0.5 bg-gray-200 text-gray-500 rounded-md uppercase tracking-wider">
-                          {tag}
-                       </span>
-                    ))}
-                 </div>
-              )}
+              <div className="mt-auto pt-3">
+                  {bug.tags && bug.tags.length > 0 && (
+                     <div className="flex flex-wrap gap-1 mb-2 opacity-60">
+                        {bug.tags.map((tag, idx) => (
+                           <span key={idx} className="text-[10px] font-bold px-2 py-0.5 bg-gray-200 text-gray-500 rounded-md uppercase tracking-wider">
+                              {tag}
+                           </span>
+                        ))}
+                     </div>
+                  )}
+                  {bug.createdBy && (
+                     <div className="flex items-center gap-1.5 text-gray-400">
+                        <UserIcon size={12} />
+                        <span className="text-[10px] font-medium truncate">{bug.createdBy.name}</span>
+                     </div>
+                  )}
+              </div>
            </div>
           ))}
         </div>
@@ -415,15 +468,38 @@ Based on this information, please:
             <div className="bg-[#FDF8EE] w-full max-w-5xl h-[80vh] flex rounded-[2rem] shadow-2xl border-2 border-white overflow-hidden">
                 
                 {/* Left Side: Bug Details */}
-                <div className="w-1/2 p-8 border-r border-[#E5D4C3] overflow-y-auto flex flex-col">
-                    <div className="flex justify-between items-start mb-6">
-                        <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${selectedBug.priority === 'Critical' ? 'bg-red-100 text-red-600' : 'bg-gray-200 text-gray-700'}`}>
-                            {selectedBug.priority} Priority
-                        </span>
+                <div className="w-1/2 p-8 border-r border-[#E5D4C3] overflow-y-auto flex flex-col relative">
+                    {/* EDIT TOGGLE BUTTON - Only show if current user created it */}
+                    {selectedBug.createdBy && selectedBug.createdBy._id === user._id && !isEditingBug && (
+                       <button 
+                         onClick={() => setIsEditingBug(true)}
+                         className="absolute top-8 right-8 p-2 bg-white rounded-full text-[#A88B6E] hover:text-[#5C4A3D] hover:bg-gray-100 transition-colors shadow-sm"
+                         title="Edit Bug"
+                       >
+                          <Edit2 size={18} />
+                       </button>
+                    )}
+
+                    <div className="flex justify-between items-start mb-6 pr-10">
+                        {isEditingBug ? (
+                            <select 
+                                value={editBugData.priority} onChange={e => setEditBugData({...editBugData, priority: e.target.value})}
+                                className={`px-4 py-2 bg-white border-2 ${theme.inputBorder} rounded-full focus:outline-none focus:border-[#F4B976] ${theme.textDark} text-xs font-bold uppercase`}
+                            >
+                                <option value="Low">Low</option>
+                                <option value="Medium">Medium</option>
+                                <option value="High">High</option>
+                                <option value="Critical">Critical</option>
+                            </select>
+                        ) : (
+                            <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${selectedBug.priority === 'Critical' ? 'bg-red-100 text-red-600' : 'bg-gray-200 text-gray-700'}`}>
+                                {selectedBug.priority} Priority
+                            </span>
+                        )}
                         <span className={`text-sm font-bold ${theme.textLight}`}>{selectedBug.status}</span>
                     </div>
 
-                    {selectedBug.tags && selectedBug.tags.length > 0 && (
+                    {!isEditingBug && selectedBug.tags && selectedBug.tags.length > 0 && (
                         <div className="flex flex-wrap gap-2 mb-4">
                             {selectedBug.tags.map((tag, idx) => (
                                 <span key={idx} className="text-xs font-bold px-2.5 py-1 bg-purple-100 text-purple-600 rounded-md uppercase tracking-wider">
@@ -433,27 +509,65 @@ Based on this information, please:
                         </div>
                     )}
                     
-                    <h2 className={`text-3xl font-bold ${theme.textDark} mb-4`}>{selectedBug.title}</h2>
+                    {isEditingBug ? (
+                        <input 
+                            type="text" 
+                            value={editBugData.title} onChange={e => setEditBugData({...editBugData, title: e.target.value})}
+                            className={`w-full text-2xl font-bold px-4 py-3 bg-white border-2 ${theme.inputBorder} rounded-2xl focus:outline-none focus:border-[#F4B976] ${theme.textDark} mb-4`}
+                        />
+                    ) : (
+                        <h2 className={`text-3xl font-bold ${theme.textDark} mb-4 pr-10`}>{selectedBug.title}</h2>
+                    )}
                     
+                    <div className="mb-4">
+                         {selectedBug.createdBy && (
+                             <div className="flex items-center gap-2 text-[#A88B6E] bg-white w-fit px-3 py-1.5 rounded-full shadow-sm border border-[#E5D4C3]">
+                                <UserIcon size={14} />
+                                <span className="text-xs font-bold tracking-wider">Reported by {selectedBug.createdBy.name}</span>
+                             </div>
+                          )}
+                    </div>
+
                     <div className="mb-6 flex-grow">
                         <h3 className={`text-sm font-bold ${theme.textLight} mb-2 uppercase tracking-wider`}>Description</h3>
-                        <p className={`text-base ${theme.textDark} whitespace-pre-wrap`}>{selectedBug.description}</p>
+                        {isEditingBug ? (
+                            <textarea 
+                                rows="8"
+                                value={editBugData.description} onChange={e => setEditBugData({...editBugData, description: e.target.value})}
+                                className={`w-full px-4 py-3 bg-white border-2 ${theme.inputBorder} rounded-2xl focus:outline-none focus:border-[#F4B976] ${theme.textDark} resize-none`}
+                            ></textarea>
+                        ) : (
+                            <p className={`text-base ${theme.textDark} whitespace-pre-wrap`}>{selectedBug.description}</p>
+                        )}
                     </div>
 
                     <div className="mt-auto flex gap-4 pt-6 border-t border-[#E5D4C3]">
-                        {selectedBug.status === 'To Do' && (
-                             <button onClick={() => handleUpdateStatus(selectedBug._id, 'In Progress', null)} className="flex-1 py-3 rounded-full bg-white text-blue-500 font-bold border-2 border-blue-200 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2">
-                                Start Working
-                             </button>
+                        {isEditingBug ? (
+                            <>
+                                <button onClick={() => setIsEditingBug(false)} className="flex-1 py-3 rounded-full bg-white text-[#A88B6E] font-bold border-2 border-[#E5D4C3] hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+                                    <X size={18} /> Cancel
+                                </button>
+                                <button onClick={handleSaveEdit} className={`flex-1 py-3 rounded-full ${theme.primary} ${theme.primaryHover} text-white font-bold transition-all shadow-md active:scale-95 flex items-center justify-center gap-2`}>
+                                    <Save size={18} /> Save Changes
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                {selectedBug.status === 'To Do' && (
+                                     <button onClick={() => handleUpdateStatus(selectedBug._id, 'In Progress', null)} className="flex-1 py-3 rounded-full bg-white text-blue-500 font-bold border-2 border-blue-200 hover:bg-blue-50 transition-colors flex items-center justify-center gap-2">
+                                        Start Working
+                                     </button>
+                                )}
+                                 {selectedBug.status === 'In Progress' && (
+                                     <button onClick={() => handleUpdateStatus(selectedBug._id, 'Squashed', null)} className="flex-1 py-3 rounded-full bg-green-500 text-white font-bold shadow-md hover:bg-green-600 transition-colors flex items-center justify-center gap-2">
+                                        <Check size={18} /> Squash Bug
+                                     </button>
+                                )}
+                                <button onClick={closeExpandedBug} className={`px-6 py-3 rounded-full bg-white ${theme.textLight} font-bold border-2 ${theme.inputBorder} hover:bg-gray-50 transition-colors`}>
+                                    Close
+                                </button>
+                            </>
                         )}
-                         {selectedBug.status === 'In Progress' && (
-                             <button onClick={() => handleUpdateStatus(selectedBug._id, 'Squashed', null)} className="flex-1 py-3 rounded-full bg-green-500 text-white font-bold shadow-md hover:bg-green-600 transition-colors flex items-center justify-center gap-2">
-                                <Check size={18} /> Squash Bug
-                             </button>
-                        )}
-                        <button onClick={closeExpandedBug} className={`px-6 py-3 rounded-full bg-white ${theme.textLight} font-bold border-2 ${theme.inputBorder} hover:bg-gray-50 transition-colors`}>
-                            Close
-                        </button>
                     </div>
                 </div>
 
@@ -503,7 +617,7 @@ Based on this information, please:
                                             <Sparkles size={16}/> AI Suggestion
                                         </h3>
                                         <div className="flex-grow p-5 bg-white border-2 border-purple-200 rounded-2xl text-sm text-gray-700 overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner">
-                                            {aiSolution}
+                                            {formatAIResponse(aiSolution)}
                                         </div>
                                         <button 
                                             onClick={() => setAiSolution('')}
