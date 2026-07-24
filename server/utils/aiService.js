@@ -1,109 +1,312 @@
-require('dotenv').config(); 
+require("dotenv").config();
+
 const { GoogleGenAI } = require("@google/genai");
 
-const apiKey = process.env.GEMINI_API_KEY;
-if (!apiKey) {
-    console.error("CRITICAL ERROR: GEMINI_API_KEY is not defined in process.env!");
+// ==============================
+// Environment variables
+// ==============================
+
+const geminiApiKey = process.env.GEMINI_API_KEY?.trim();
+const openRouterApiKey = process.env.OPENROUTER_API_KEY?.trim();
+
+let ai = null;
+
+if (geminiApiKey) {
+  ai = new GoogleGenAI({
+    apiKey: geminiApiKey,
+  });
+
+  console.log("Gemini API configured.");
 } else {
-    console.log("Successfully found GEMINI_API_KEY starting with:", apiKey.substring(0, 5) + "...");
+  console.warn(
+    "GEMINI_API_KEY is not configured. Gemini will be skipped."
+  );
 }
 
-let ai;
-if (apiKey) {
-    ai = new GoogleGenAI({ apiKey: String(apiKey) });
+if (openRouterApiKey) {
+  console.log("OpenRouter fallback configured.");
+} else {
+  console.warn(
+    "OPENROUTER_API_KEY is not configured. OpenRouter fallback will be unavailable."
+  );
 }
 
-// Fallback helper function to try multiple models
-const generateWithFallback = async (prompt) => {
-    if (!ai) throw new Error("AI not initialized");
+// ==============================
+// OpenRouter fallback
+// ==============================
 
-    const modelsToTry = [
-  "gemini-3.6-flash",
-  "gemini-3.5-flash-lite",
-  "gemini-2.5-flash",
-  "gemini-2.5-flash-lite",
-];
+const generateWithOpenRouter = async (prompt) => {
+  if (!openRouterApiKey) {
+    throw new Error("OPENROUTER_API_KEY is not configured");
+  }
 
-    let lastError;
+  console.log("Attempting request with OpenRouter free model...");
 
-    for (const modelName of modelsToTry) {
-        try {
-            console.log(`Attempting request with model: ${modelName}`);
-            const response = await ai.models.generateContent({
-                model: modelName,
-                contents: prompt,
-            });
-            console.log(`Success with model: ${modelName}`);
-            return response;
-        } catch (error) {
-            console.warn(`Model ${modelName} failed. Reason: ${error.status || error.message}`);
-            lastError = error;
-            // If it's a 401 (Bad API Key), stop trying. Otherwise, keep looping.
-            if (error.status === 401) {
-                throw error;
-            }
-        }
+  const controller = new AbortController();
+
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, 30000);
+
+  try {
+    const response = await fetch(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        method: "POST",
+
+        headers: {
+          Authorization: `Bearer ${openRouterApiKey}`,
+          "Content-Type": "application/json",
+          "X-OpenRouter-Title": "Squash Bugs",
+        },
+
+        body: JSON.stringify({
+          model: "openrouter/free",
+
+          messages: [
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+
+          temperature: 0.2,
+          max_tokens: 600,
+        }),
+
+        signal: controller.signal,
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const errorMessage =
+        data?.error?.message ||
+        `OpenRouter request failed with status ${response.status}`;
+
+      const error = new Error(errorMessage);
+      error.status = response.status;
+
+      throw error;
     }
 
-    // If we exhausted all models
-    throw lastError;
-};
+    const text = data?.choices?.[0]?.message?.content?.trim();
 
+    if (!text) {
+      throw new Error("OpenRouter returned an empty response");
+    }
 
-const analyzeBugAndGenerateTags = async (title, description) => {
-  try {
-    if (!ai) return [];
+    console.log(
+      `OpenRouter request succeeded using: ${
+        data.model || "an available free model"
+      }`
+    );
 
-    const prompt = `
-      You are an expert software engineer triage assistant.
-      Analyze the following bug report and provide 1 to 3 short, one-word tags (e.g., Frontend, Database, Auth, UI, API, Security, CSS) that categorize it. 
-      Return ONLY a comma-separated list of tags, nothing else. No explanations.
-      
-      Title: ${title}
-      Description: ${description}
-    `;
-
-    // Use our new fallback wrapper
-    const response = await generateWithFallback(prompt);
-    
-    const text = response.text;
-    const tags = text
-        .split(',')
-        .map(tag => tag.trim().replace(/[^a-zA-Z0-9-]/g, '')) 
-        .filter(t => t.length > 0); 
-        
-    return tags;
+    return text;
   } catch (error) {
-    console.error("AI Tagging Error:", error.message || error);
-    return []; 
+    if (error.name === "AbortError") {
+      throw new Error("OpenRouter request timed out");
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
 };
 
-const suggestBugFix = async (title, description) => {
-    try {
-      if (!ai) return "No API key configured. Check your terminal for errors.";
-  
-      const prompt = `
-        You are a helpful senior software engineer mentoring a junior developer.
-        Please look at this bug report:
-        
-        Title: ${title}
-        Description: ${description}
-        
-        Provide a short, easy-to-read response. 
-        1. First, give a 1-2 sentence summary of what might be causing the issue.
-        2. Second, provide a bulleted list of 2-3 specific things the developer should check or fix.
-        3. If the description is too vague, politely ask them to look for specific error logs or code snippets.
-      `;
-  
-      // Use our new fallback wrapper
-      const response = await generateWithFallback(prompt);
+// ==============================
+// Gemini → OpenRouter fallback
+// ==============================
 
-      return response.text;
-    } catch (error) {
-      console.error("AI Debugging Error:", error.message || error);
-      return "Sorry, I encountered an error. Please check your API limits or try again later.";
+const generateWithFallback = async (prompt) => {
+  let lastGeminiError = null;
+
+  const modelsToTry = [
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-2.5-flash",
+    "gemini-2.5-flash-lite",
+  ];
+
+  // First try Gemini
+  if (ai) {
+    for (const modelName of modelsToTry) {
+      try {
+        console.log(
+          `Attempting request with Gemini model: ${modelName}`
+        );
+
+        const response = await ai.models.generateContent({
+          model: modelName,
+          contents: prompt,
+        });
+
+        const text = response.text?.trim();
+
+        if (!text) {
+          throw new Error(
+            `Gemini model ${modelName} returned an empty response`
+          );
+        }
+
+        console.log(`Success with Gemini model: ${modelName}`);
+
+        return text;
+      } catch (error) {
+        lastGeminiError = error;
+
+        const status =
+          error.status ||
+          error.code ||
+          error.message ||
+          "Unknown error";
+
+        console.warn(
+          `Gemini model ${modelName} failed. Reason: ${status}`
+        );
+
+        /*
+         * A 401 or 403 generally affects all Gemini models,
+         * so stop trying Gemini and move to OpenRouter.
+         */
+        if (error.status === 401 || error.status === 403) {
+          console.warn(
+            "Gemini authentication failed. Moving to OpenRouter."
+          );
+
+          break;
+        }
+      }
     }
-  };
+  } else {
+    console.warn(
+      "Gemini is not configured. Moving directly to OpenRouter."
+    );
+  }
 
-module.exports = { analyzeBugAndGenerateTags, suggestBugFix };
+  // If every Gemini attempt failed, try OpenRouter
+  try {
+    console.warn(
+      "Gemini is unavailable. Switching to OpenRouter fallback."
+    );
+
+    return await generateWithOpenRouter(prompt);
+  } catch (openRouterError) {
+    console.error(
+      "OpenRouter fallback failed:",
+      openRouterError.message || openRouterError
+    );
+
+    const finalError = new Error(
+      "All configured AI providers failed."
+    );
+
+    finalError.geminiError =
+      lastGeminiError?.message || null;
+
+    finalError.openRouterError =
+      openRouterError?.message || null;
+
+    throw finalError;
+  }
+};
+
+// ==============================
+// Generate bug tags
+// ==============================
+
+const analyzeBugAndGenerateTags = async (
+  title,
+  description
+) => {
+  try {
+    if (!ai && !openRouterApiKey) {
+      console.warn(
+        "No AI provider is configured. Returning empty tags."
+      );
+
+      return [];
+    }
+
+    const prompt = `
+You are an expert software engineer triage assistant.
+
+Analyze the following bug report and provide 1 to 3 short,
+one-word tags that categorize it.
+
+Examples:
+Frontend, Backend, Database, Auth, UI, API, Security, CSS,
+Performance, Network, Validation, Deployment
+
+Return ONLY a comma-separated list of tags.
+Do not provide explanations.
+Do not include bullets or Markdown.
+
+Title: ${title}
+Description: ${description}
+    `.trim();
+
+    const text = await generateWithFallback(prompt);
+
+    const tags = text
+      .split(",")
+      .map((tag) =>
+        tag
+          .trim()
+          .replace(/[^a-zA-Z0-9-]/g, "")
+      )
+      .filter((tag) => tag.length > 0)
+      .slice(0, 3);
+
+    return tags;
+  } catch (error) {
+    console.error(
+      "AI Tagging Error:",
+      error.message || error
+    );
+
+    // Bug creation should continue even when AI fails
+    return [];
+  }
+};
+
+
+
+const suggestBugFix = async (title, description) => {
+  try {
+    if (!ai && !openRouterApiKey) {
+      return "No AI provider is currently configured.";
+    }
+
+    const prompt = `
+You are a helpful senior software engineer mentoring a junior developer.
+
+Review this bug report:
+
+Title: ${title}
+Description: ${description}
+
+Provide a short and easy-to-read response.
+
+1. Begin with a one or two sentence explanation of the likely cause.
+2. Provide two or three specific checks or fixes as a bulleted list.
+3. If the report is too vague, ask the developer to provide relevant error logs, affected code, expected behavior, and actual behavior.
+4. Do not invent files, errors, or technical details that are not present in the report.
+    `.trim();
+
+    return await generateWithFallback(prompt);
+  } catch (error) {
+    console.error(
+      "AI Debugging Error:",
+      error.message || error
+    );
+
+    return "Sorry, the AI debugging services are temporarily unavailable. Please try again later.";
+  }
+};
+
+module.exports = {
+  analyzeBugAndGenerateTags,
+  suggestBugFix,
+};
